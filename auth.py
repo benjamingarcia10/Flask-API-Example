@@ -14,24 +14,26 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
 db = SQLAlchemy(app)
 
 
-class User(db.Model):
+class AuthorizedUser(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     public_id = db.Column(db.String(50), unique=True)
-    ip_address = db.Column(db.String(50))
     name = db.Column(db.String(50), unique=True)
     password = db.Column(db.String(80))
+    ip_address = db.Column(db.String(50))
     admin = db.Column(db.Boolean)
 
     def get_user_data(self):
-        return {'public_id': self.public_id, 'ip_address': self.ip_address, 'name': self.name,
-                'password': self.password, 'admin': self.admin}
+        return {'public_id': self.public_id, 'name': self.name, 'password': self.password,
+                'ip_address': self.ip_address, 'admin': self.admin}
 
 
-class Todo(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    text = db.Column(db.String(50))
-    complete = db.Column(db.Boolean)
-    user_id = db.Column(db.Integer)
+def add_admin_account(name, password):
+    hashed_password = generate_password_hash(password, method='sha256')
+
+    new_user = AuthorizedUser(public_id=str(uuid.uuid4()), ip_address='', name=name,
+                              password=hashed_password, admin=True)
+    db.session.add(new_user)
+    db.session.commit()
 
 
 def token_required(func):
@@ -47,7 +49,7 @@ def token_required(func):
 
         try:
             data = jwt.decode(token, app.config['SECRET_KEY'])
-            current_user = User.query.filter_by(public_id=data['public_id']).first()
+            current_user = AuthorizedUser.query.filter_by(public_id=data['public_id']).first()
         except:
             return jsonify({'message': 'Token is invalid!'}), 401
 
@@ -62,7 +64,7 @@ def get_all_users(current_user):
     if not current_user.admin:
         return jsonify({'message': 'Cannot perform that function!'})
 
-    users = User.query.all()
+    users = AuthorizedUser.query.all()
 
     output = []
 
@@ -78,7 +80,7 @@ def get_one_user(current_user, public_id):
     if not current_user.admin:
         return jsonify({'message': 'Cannot perform that function!'})
 
-    user = User.query.filter_by(public_id=public_id).first()
+    user = AuthorizedUser.query.filter_by(public_id=public_id).first()
 
     if not user:
         return jsonify({'message': 'No user found!'})
@@ -96,8 +98,8 @@ def create_user(current_user):
 
     hashed_password = generate_password_hash(data['password'], method='sha256')
 
-    new_user = User(public_id=str(uuid.uuid4()), ip_address=str(request.remote_addr), name=data['name'],
-                    password=hashed_password, admin=False)
+    new_user = AuthorizedUser(public_id=str(uuid.uuid4()), ip_address=str(request.remote_addr), name=data['name'],
+                              password=hashed_password, admin=False)
     db.session.add(new_user)
     db.session.commit()
 
@@ -110,7 +112,7 @@ def promote_user(current_user, public_id):
     if not current_user.admin:
         return jsonify({'message': 'Cannot perform that function!'})
 
-    user = User.query.filter_by(public_id=public_id).first()
+    user = AuthorizedUser.query.filter_by(public_id=public_id).first()
 
     if not user:
         return jsonify({'message': 'No user found!'})
@@ -127,7 +129,7 @@ def delete_user(current_user, public_id):
     if not current_user.admin:
         return jsonify({'message': 'Cannot perform that function!'})
 
-    user = User.query.filter_by(public_id=public_id).first()
+    user = AuthorizedUser.query.filter_by(public_id=public_id).first()
 
     if not user:
         return jsonify({'message': 'No user found!'})
@@ -144,7 +146,7 @@ def login():
     if not auth or not auth.username or not auth.password:
         return make_response('Could not verify', 401, {'WWW-Authenticate': 'Basic realm="Login required!"'})
 
-    user = User.query.filter_by(name=auth.username).first()
+    user = AuthorizedUser.query.filter_by(name=auth.username).first()
 
     if not user:
         return make_response('Could not verify', 401, {'WWW-Authenticate': 'Basic realm="Login required!"'})
@@ -161,4 +163,5 @@ def login():
 
 if __name__ == '__main__':
     # db.create_all()
+    # add_admin_account('Admin', 'Admin100!')
     app.run(debug=True)
