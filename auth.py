@@ -13,6 +13,8 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
 
 db = SQLAlchemy(app)
 
+# TODO VERIFY IP ADDRESS RECEIVED IS CORRECT ONE
+
 
 class AuthorizedUser(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -98,7 +100,7 @@ def create_user(current_user):
         data = request.get_json()
         hashed_password = generate_password_hash(data['password'], method='sha256')
 
-        new_user = AuthorizedUser(public_id=str(uuid.uuid4()), ip_address=str(request.remote_addr), name=data['name'],
+        new_user = AuthorizedUser(public_id=str(uuid.uuid4()), ip_address=str(request.environ['REMOTE_ADDR']), name=data['name'],
                                   password=hashed_password, admin=False)
         db.session.add(new_user)
         db.session.commit()
@@ -154,8 +156,8 @@ def login():
         return make_response('Could not verify', 401, {'WWW-Authenticate': 'Basic realm="Login required!"'})
 
     if check_password_hash(user.password, auth.password):
-        if str(request.remote_addr) != user.ip_address:
-            return make_response('Unauthorized IP Address', 401, {'WWW-Authenticate': 'Basic realm="Login required!"'})
+        if str(request.environ['REMOTE_ADDR']) != user.ip_address:
+            return make_response(f'Unauthorized IP Address: {request.environ["REMOTE_ADDR"]}', 401, {'WWW-Authenticate': 'Basic realm="Login required!"'})
         token = jwt.encode(
             {'public_id': user.public_id, 'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=30)},
             app.config['SECRET_KEY'])
